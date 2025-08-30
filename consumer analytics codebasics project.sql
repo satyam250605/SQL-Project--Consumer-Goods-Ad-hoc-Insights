@@ -1,0 +1,133 @@
+
+# CODEBASIC CHALLENGE 4- Cunsumer Analytics Ad-Hoq Analysis
+
+-- 1. Provide the list of markets in which customer "Atliq  Exclusive" operates its 
+-- business in the APAC region.
+
+SELECT * 
+FROM dim_customer
+WHERE customer = "Atliq Exclusive" AND region = "APAC";
+
+-- 2. What is the percentage of unique product increase in 2021 vs. 2020? 
+
+WITH product_2020 AS (
+	SELECT COUNT(DISTINCT product_code) AS unique_products_2020
+    FROM fact_gross_price
+    WHERE fiscal_year = '2020'
+),
+product_2021 AS (
+	SELECT COUNT(DISTINCT product_code) AS unique_products_2021
+    FROM fact_gross_price
+    WHERE fiscal_year = '2021'
+)
+
+SELECT 
+	p20.unique_products_2020,
+    p21.unique_products_2021,
+    ROUND(((p21.unique_products_2021-p20.unique_products_2020)/p20.unique_products_2020*100),2)AS Pct_change
+FROM product_2020 AS p20, 
+	 product_2021 AS p21;
+     
+-- 3. Provide a report with all the unique product counts for each segment and sort them 
+-- in descending order of product counts. 
+
+SELECT 
+	segment,
+	COUNT(DISTINCT product_code) AS Unique_product
+FROM dim_product
+GROUP BY segment 
+ORDER BY Unique_product DESC;
+
+-- 4. Follow-up: Which segment had the most increase in unique products in 2021 vs 2020?
+
+WITH p_count2020 AS (
+	SELECT dp.segment,
+		COUNT(DISTINCT dp.product_code) AS Unique_product_2020
+	FROM dim_product dp
+    JOIN fact_gross_price fp ON fp.product_code = dp.product_code
+    WHERE fp.fiscal_year = '2020'
+	GROUP BY segment 
+),
+
+p_count2021 AS (
+	SELECT dp.segment,
+		COUNT(DISTINCT dp.product_code) AS Unique_product_2021
+	FROM dim_product dp
+    JOIN fact_gross_price fp ON fp.product_code = dp.product_code
+    WHERE fp.fiscal_year = '2021'
+	GROUP BY segment 
+)
+
+SELECT 
+	p20.segment,
+    p20.Unique_product_2020,
+    p21.Unique_product_2021,
+    (p21.Unique_product_2021-p20.Unique_product_2020) AS Difference
+FROM p_count2021 p21,
+	 p_count2020 p20;
+     
+-- 5. Get the products that have the highest and lowest manufacturing costs.
+
+SELECT 
+	p.product_code,
+	p.product, 
+    fm.manufacturing_cost
+FROM dim_product p
+JOIN fact_manufacturing_cost fm ON fm.product_code = p.product_code
+WHERE fm.manufacturing_cost = 
+	(SELECT MIN(manufacturing_cost) FROM fact_manufacturing_cost)
+							 OR
+	(SELECT MAX(manufacturing_cost) FROM fact_manufacturing_cost)
+ORDER BY fm.manufacturing_cost DESC;
+
+-- 6. Generate a report which contains the top 5 customers who received an 
+-- average high pre_invoice_discount_pct  for the  fiscal  year 2021  and in the Indian  market.
+
+SELECT c.customer_code, c.customer, ROUND(AVG(f.pre_invoice_discount_pct), 2) AS avg_discount_percentage
+FROM dim_customer c
+JOIN fact_pre_invoice_deductions f ON c.customer_code = f.customer_code
+WHERE  f.fiscal_year = '2021' AND c.market = "India" 
+GROUP BY c.customer_code, c.customer
+ORDER BY avg_discount_percentage DESC
+LIMIT 5;
+
+-- 7. Get the complete report of the Gross sales amount for the customer “Atliq Exclusive” for each month.
+
+SELECT 
+	YEAR(fs.date) AS Year,
+    MONTHNAME(fs.date) AS Month,
+    ROUND(SUM(fs.sold_quantity*fg.gross_price),2) AS Gross_sales
+FROM dim_customer c
+JOIN fact_sales_monthly fs ON fs.customer_code = c.customer_code
+JOIN fact_gross_price fg ON fg.product_code = fs.product_code 
+WHERE c.customer = "Atliq Exclusive"
+GROUP BY YEAR(fs.date), MONTHNAME(fs.date)
+ORDER BY Gross_sales DESC;
+
+-- 8. In which quarter of 2020, got the maximum total_sold_quantity?
+
+WITH quarter_sales AS (
+	SELECT date, SUM(sold_quantity) AS Total_sold_quantity,
+    CASE
+		WHEN MONTH(date) IN (9,10,11) THEN "Q1"
+        WHEN MONTH(date) IN (12,1,2) THEN "Q2"
+        WHEN MONTH(date) IN (3,4,5) THEN "Q3"
+        ELSE "Q4"
+    END AS Quarters
+    FROM fact_sales_monthly
+    WHERE fiscal_year = '2020'
+    GROUP BY date
+    ORDER BY Quarters
+)
+
+SELECT 
+	date, Quarters, Total_sold_quantity
+FROM quarter_sales
+ORDER BY Total_sold_quantity DESC;
+
+
+# Note: The core logic and initial code in this project are my own.
+-- I utilized an AI assistant purely as a tool for validation, debugging, 
+-- and to explore alternative best practices to ensure the final queries 
+-- were both accurate and efficient.
+  
